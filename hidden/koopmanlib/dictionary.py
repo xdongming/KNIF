@@ -1,6 +1,6 @@
 from scipy.cluster.vq import kmeans
 import scipy
-from tensorflow.keras.layers import Layer, Dense
+from tensorflow.keras.layers import Layer, Dense, Conv1D
 from tensorflow.keras.layers import Input, Add, Multiply, Lambda, Concatenate
 from tensorflow.keras.models import Model
 import numpy as np
@@ -46,7 +46,59 @@ class DicNN(Layer):
             'n_psi_train': self.n_psi_train
         })
         return config
+    
+class PsiNNWithEncoder(Layer):
+    def __init__(self, visible_dim, num_hidden=1, hidden_size=32, kernel_size=31,
+                 layer_sizes=[64, 64], n_psi_train=22, target_dim=None, **kwargs):
+        super().__init__(**kwargs)
+        self.visible_dim = visible_dim
+        self.num_hidden = num_hidden
+        self.hidden_size = hidden_size
+        self.kernel_size = kernel_size
+        self.layer_sizes = layer_sizes
+        self.n_dic_customized = n_psi_train
+        self.target_dim = target_dim if target_dim is not None else visible_dim
 
+        self.conv1 = Conv1D(filters=self.hidden_size, kernel_size=self.kernel_size,
+                            activation="relu", padding="valid")
+        self.conv2 = Conv1D(filters=self.hidden_size, kernel_size=1,
+                            activation="relu", padding="valid")
+        self.conv3 = Conv1D(filters=self.num_hidden, kernel_size=1,
+                            activation="tanh", padding="valid")
+
+        self.dicNN = DicNN(layer_sizes=self.layer_sizes, n_psi_train=self.n_dic_customized)
+
+    def _tile_for_prediction(self, inputs_2d):
+        x = tf.expand_dims(inputs_2d, axis=1)           # [B,1,V]
+        x = tf.tile(x, [1, self.kernel_size, 1])        # [B,K,V]
+        return x
+
+    def call(self, inputs):
+        vis = self._tile_for_prediction(inputs) if len(inputs.shape) == 2 else inputs[..., :self.visible_dim]
+
+        hid = self.conv1(vis)
+        hid = self.conv2(hid)
+        hid = self.conv3(hid)                           # [B,T',H]
+
+        interval = (self.kernel_size - 1) // 2
+        vis_cropped = (vis[:, interval:-interval, :]
+                       if (vis.shape[1] is None or int(vis.shape[1]) > self.kernel_size)
+                       else vis[:, interval:interval+1, :])  # [B,T',V]
+
+        aug_inputs = Concatenate(axis=-1)([vis_cropped, hid])  # [B,T', V+H]
+
+        const = tf.ones((tf.shape(aug_inputs)[0], tf.shape(aug_inputs)[1], 1), dtype=aug_inputs.dtype)
+        psi_x = self.dicNN(aug_inputs)                        
+        outputs = Concatenate(axis=-1)([const, aug_inputs, psi_x])
+        return outputs
+
+    def generate_B(self, inputs):
+        aug_dim = self.visible_dim + self.num_hidden
+        self.basis_func_number = self.n_dic_customized + aug_dim + 1
+        B = np.zeros((self.basis_func_number, self.target_dim))
+        for i in range(self.target_dim):
+            B[i + 1][i] = 1.0
+        return B
 
 class PsiNN(Layer, AbstractDictionary):
     """Concatenate constant, data and trainable dictionaries together as [1, data, DicNN]
