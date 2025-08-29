@@ -1,0 +1,13 @@
+matplotlib==3.10.0
+numpy==1.26.4
+pandas==2.2.3
+PyDMD==2025.2.1
+pytorch-lightning==2.5.0.post0
+scikit-learn==1.6.1
+scipy==1.15.2
+seaborn==0.13.2
+tensorflow==2.20.0
+# Editable install with no version control (torch==2.4.0)
+-e /opt/conda/lib/python3.11/site-packages/torch-2.4.0-py3.11.egg-info
+torchdiffeq==0.2.5
+tqdm==4.66.4
