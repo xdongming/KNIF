@@ -26,7 +26,7 @@ This document summarizes the repository layout and provides simple, generic usag
 ├─ sde/                  # stochastic differential system notebooks/examples
 ├─ noise/                # noise robustness studies
 ├─ README.md
-├─ requirements.txt
+└─ requirements.txt
 ```
 
 > Folder names are shown as they exist in the repository; use only the parts relevant to your work.
